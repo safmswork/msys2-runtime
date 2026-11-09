@@ -16,7 +16,7 @@ override CC = @MINGW_CC@
 override CXX = @MINGW_CXX@
 AM_CPPFLAGS =
 
-noinst_PROGRAMS = cygrun cygload
+noinst_PROGRAMS = cygrun cygload appcontainer-named-objects
 
 cygrun_SOURCES = \
 	../cygrun.c
@@ -24,3 +24,8 @@ cygrun_SOURCES = \
 cygload_SOURCES = \
 	../winsup.api/cygload.cc
 cygload_LDFLAGS=-static -Wl,-e,cygloadCRTStartup
+
+appcontainer_named_objects_SOURCES = \
+	appcontainer-named-objects.cc
+appcontainer_named_objects_LDFLAGS = -static -municode
+appcontainer_named_objects_LDADD = -ladvapi32
