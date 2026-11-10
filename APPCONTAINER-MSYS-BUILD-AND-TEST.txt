@@ -49,22 +49,76 @@ are available from:
 2. Install the Git for Windows SDK
 ----------------------------------
 
-Download and run the 64-bit Git for Windows SDK installer. Install it at:
+The normal Git for Windows installer is not sufficient for compiling the
+runtime. Download the separate Git for Windows SDK:
+
+  1. Open https://gitforwindows.org/ in a browser.
+  2. Find "Git for Windows SDK : Contributing Code".
+  3. Select "Download Git for Windows SDK".
+  4. On the latest SDK release page, download the 64-bit SDK installer.
+     Do not download the ordinary Git for Windows installer.
+  5. Run the SDK installer as Administrator.
+  6. Select an installation directory. These instructions use:
 
   C:\git-sdk-64
 
-Open the SDK's MSYS shell:
+The SDK installer is a self-extracting bootstrapper. It downloads/clones the
+SDK contents and can take several minutes. It includes its own Git, Bash,
+Pacman, MSYS runtime, and package configuration. A separate Visual Studio
+installation, Windows SDK, CMake, or Python installation is not required for
+this runtime build.
+
+When setup finishes, verify these files exist:
+
+  C:\git-sdk-64\git-bash.exe
+  C:\git-sdk-64\msys2_shell.cmd
+  C:\git-sdk-64\update-via-pacman.bat
+  C:\git-sdk-64\usr\bin\pacman.exe
+
+If the SDK is installed on another drive or in another directory, substitute
+that path everywhere below. For example, an SDK installed at G:\git-sdk-64
+uses G:\git-sdk-64\msys2_shell.cmd.
+
+Before installing build dependencies, update the SDK:
+
+  1. Close every Git SDK Bash/MSYS window.
+  2. Open cmd.exe as Administrator.
+  3. Run:
+
+       cd /d C:\git-sdk-64
+       update-via-pacman.bat
+
+  4. Wait for the update to finish and review any reported errors.
+
+Open the SDK's MSYS shell by double-clicking:
 
   C:\git-sdk-64\msys2_shell.cmd
 
 Do not use a normal Git Bash window or a MINGW64 shell for this build. The
 runtime must be built with the MSYS toolchain.
 
+In the SDK shell, confirm that it is the MSYS environment:
+
+  echo "$MSYSTEM"
+
+Expected output:
+
+  MSYS
+
+Confirm that Pacman is available:
+
+  command -v pacman
+
+Expected output:
+
+  /usr/bin/pacman
+
 
 3. Update the SDK and install build dependencies
 ------------------------------------------------
 
-In the Git SDK MSYS shell, update package metadata and packages:
+If update-via-pacman.bat was not run in the previous section, update package
+metadata and packages now in the Git SDK MSYS shell:
 
   pacman -Syu
 
