@@ -8,10 +8,6 @@ These instructions build the AppContainer namespace changes from:
 
   https://github.com/safmswork/msys2-runtime
 
-Branch:
-
-  prototype-fix
-
 The resulting DLL is intended for testing with a normal Git for Windows
 installation. The fix allows top-level MSYS programs such as Vim and basic
 Bash commands to start inside the GitHub Copilot CLI Windows sandbox.
@@ -158,8 +154,7 @@ In the Git SDK MSYS shell:
 
   mkdir -p /usr/src
   cd /usr/src
-  git clone --branch prototype-fix \
-    https://github.com/safmswork/msys2-runtime.git \
+  git clone https://github.com/safmswork/msys2-runtime.git \
     appcontainer-msys2-runtime
   cd appcontainer-msys2-runtime
 
@@ -169,7 +164,7 @@ Confirm the branch:
 
 Expected output:
 
-  prototype-fix
+  main
 
 
 5. Build msys-2.0.dll
