@@ -1,0 +1,309 @@
+AppContainer MSYS Runtime Fix - Manual Build and Test Instructions
+==================================================================
+
+Purpose
+-------
+
+These instructions build the AppContainer namespace changes from:
+
+  https://github.com/safmswork/msys2-runtime
+
+Branch:
+
+  prototype-fix
+
+The resulting DLL is intended for testing with a normal Git for Windows
+installation. The fix allows top-level MSYS programs such as Vim and basic
+Bash commands to start inside the GitHub Copilot CLI Windows sandbox.
+
+Known limitation: Cygwin/MSYS fork operations still fail in sandboxes that
+forcibly relocate child images. Pipelines, background jobs, subshells, command
+substitution, and some external commands can encounter that separate issue.
+
+
+1. Requirements
+---------------
+
+Build machine:
+
+  - 64-bit Windows
+  - Internet access
+  - Git for Windows SDK, installed in C:\git-sdk-64
+  - Enough free disk space for the SDK, source, and build output
+
+Test machine or VM:
+
+  - 64-bit Windows
+  - A normal Git for Windows installation in C:\Program Files\Git
+  - GitHub Copilot CLI, if testing the AppContainer sandbox scenario
+  - Administrator access to replace the installed DLL
+
+The normal Git for Windows installer is not a build environment. Install the
+Git for Windows SDK separately. The official SDK installer and documentation
+are available from:
+
+  https://gitforwindows.org/
+  https://gitforwindows.org/building-msys2-runtime.html
+
+
+2. Install the Git for Windows SDK
+----------------------------------
+
+Download and run the 64-bit Git for Windows SDK installer. Install it at:
+
+  C:\git-sdk-64
+
+Open the SDK's MSYS shell:
+
+  C:\git-sdk-64\msys2_shell.cmd
+
+Do not use a normal Git Bash window or a MINGW64 shell for this build. The
+runtime must be built with the MSYS toolchain.
+
+
+3. Update the SDK and install build dependencies
+------------------------------------------------
+
+In the Git SDK MSYS shell, update package metadata and packages:
+
+  pacman -Syu
+
+If pacman asks you to close the terminal after updating the runtime, close all
+Git SDK windows, reopen C:\git-sdk-64\msys2_shell.cmd, and run:
+
+  pacman -Syu
+
+Install the build packages:
+
+  pacman -S --needed \
+    msys2-devel \
+    base-devel \
+    autotools \
+    cocom \
+    diffutils \
+    gcc \
+    gettext-devel \
+    libiconv-devel \
+    make \
+    mingw-w64-cross-crt \
+    mingw-w64-cross-gcc \
+    mingw-w64-cross-zlib \
+    perl \
+    zlib-devel \
+    xmlto \
+    docbook-xsl \
+    libzstd-devel
+
+These are MSYS packages. Do not substitute the native MinGW toolchain.
+
+
+4. Clone the public fork
+------------------------
+
+In the Git SDK MSYS shell:
+
+  mkdir -p /usr/src
+  cd /usr/src
+  git clone --branch prototype-fix \
+    https://github.com/safmswork/msys2-runtime.git \
+    appcontainer-msys2-runtime
+  cd appcontainer-msys2-runtime
+
+Confirm the branch:
+
+  git branch --show-current
+
+Expected output:
+
+  prototype-fix
+
+
+5. Build msys-2.0.dll
+---------------------
+
+Make sure the MSYS compiler and tools appear first in PATH:
+
+  export PATH=/usr/bin:/mingw64/bin:/mingw32/bin:$PATH
+
+Generate the Autotools files:
+
+  (cd winsup && ./autogen.sh)
+
+Configure the build:
+
+  ./configure \
+    --disable-dependency-tracking \
+    --with-msys2-runtime-commit="$(git rev-parse HEAD)"
+
+Build:
+
+  make -j8
+
+The patched DLL is produced as:
+
+  /usr/src/appcontainer-msys2-runtime/x86_64-pc-cygwin/winsup/cygwin/new-msys-2.0.dll
+
+Its Windows path is normally:
+
+  C:\git-sdk-64\usr\src\appcontainer-msys2-runtime\x86_64-pc-cygwin\winsup\cygwin\new-msys-2.0.dll
+
+The "new-" prefix is intentional. It prevents the build from overwriting the
+runtime currently being used by the SDK.
+
+For later source changes, a focused rebuild is:
+
+  cd /usr/src/appcontainer-msys2-runtime
+  make -C x86_64-pc-cygwin/winsup/cygwin \
+    -j8 new-msys-2.0.dll
+
+
+6. Record the built DLL hash
+----------------------------
+
+From a normal Windows PowerShell window:
+
+  $built = 'C:\git-sdk-64\usr\src\appcontainer-msys2-runtime\x86_64-pc-cygwin\winsup\cygwin\new-msys-2.0.dll'
+
+  Get-FileHash -LiteralPath $built -Algorithm SHA256
+
+Record the hash with the source commit:
+
+  git -C C:\git-sdk-64\usr\src\appcontainer-msys2-runtime rev-parse HEAD
+
+
+7. Prepare the test VM
+----------------------
+
+Install Git for Windows normally on the VM. The expected runtime location is:
+
+  C:\Program Files\Git\usr\bin\msys-2.0.dll
+
+If testing GitHub Copilot CLI, install it normally, authenticate, and verify
+that its Windows sandbox is enabled. Keep sandbox bypass disabled so a failed
+command is not retried outside the sandbox.
+
+Before replacing the DLL:
+
+  - Take a VM checkpoint.
+  - Exit GitHub Copilot CLI.
+  - Close Git Bash, mintty, Bash, Vim, Git, and other MSYS programs.
+  - Reboot the VM if there is any uncertainty about loaded MSYS processes.
+
+Copy new-msys-2.0.dll from the build machine to the VM as:
+
+  C:\Temp\new-msys-2.0.dll
+
+
+8. Back up and install the patched DLL
+--------------------------------------
+
+Run an elevated Windows PowerShell window on the VM:
+
+  $installed = 'C:\Program Files\Git\usr\bin\msys-2.0.dll'
+  $patched = 'C:\Temp\new-msys-2.0.dll'
+  $backup = 'C:\Program Files\Git\usr\bin\msys-2.0.dll.before-appcontainer-fix'
+
+  Get-FileHash -LiteralPath $installed -Algorithm SHA256
+  Get-FileHash -LiteralPath $patched -Algorithm SHA256
+
+  Copy-Item -LiteralPath $installed -Destination $backup
+  Copy-Item -LiteralPath $patched -Destination $installed -Force
+
+  Get-FileHash -LiteralPath $patched, $installed, $backup `
+    -Algorithm SHA256
+
+The hashes for C:\Temp\new-msys-2.0.dll and the installed msys-2.0.dll must
+match. The backup hash should be the original runtime hash.
+
+Take an "after" VM checkpoint after verifying the installed hash.
+
+
+9. Test outside the sandbox
+---------------------------
+
+In a normal Windows PowerShell window:
+
+  & 'C:\Program Files\Git\usr\bin\vim.exe' --version
+  Write-Output "Vim exit code: $LASTEXITCODE"
+
+  & 'C:\Program Files\Git\usr\bin\bash.exe' --noprofile --norc -c 'printf "BASH_OK\n"'
+  Write-Output "Bash exit code: $LASTEXITCODE"
+
+Both commands should succeed.
+
+
+10. Test inside the GitHub Copilot CLI sandbox
+----------------------------------------------
+
+Start Copilot with the Git installation as the workspace:
+
+  copilot -C 'C:\Program Files\Git' --no-auto-update
+
+In Copilot:
+
+  - Run /sandbox status.
+  - Confirm the sandbox is enabled.
+  - Confirm sandbox bypass is disabled.
+
+Ask Copilot to run Vim directly. Do not wrap it in another pwsh.exe or cmd.exe:
+
+  Run this exact command once using the sandboxed shell. Do not retry, relax,
+  or bypass the sandbox. Report the complete output and exit code:
+
+  & '.\usr\bin\vim.exe' --version
+  $code = $LASTEXITCODE
+  Write-Output "EXIT CODE: $code"
+
+Expected patched result:
+
+  - Vim prints its version.
+  - Exit code is 0.
+  - There is no NtCreateDirectoryObject failure under \BaseNamedObjects.
+
+Test basic Bash startup and built-in execution:
+
+  Run this exact command once using the sandboxed shell. Do not retry, relax,
+  or bypass the sandbox. Report the complete output and exit code:
+
+  & '.\usr\bin\bash.exe' --noprofile --norc -c 'printf "BASH_SANDBOX_OK\n"'
+  $code = $LASTEXITCODE
+  Write-Output "EXIT CODE: $code"
+
+Expected output:
+
+  BASH_SANDBOX_OK
+  EXIT CODE: 0
+
+
+11. Expected before-and-after result
+------------------------------------
+
+With the original Git for Windows msys-2.0.dll, sandboxed Vim or Bash startup
+fails with an error similar to:
+
+  NtCreateDirectoryObject(\BaseNamedObjects\msys-...): 0xC0000022
+
+With the patched DLL:
+
+  - Vim startup succeeds.
+  - Bash startup succeeds.
+  - Bash built-in-only commands succeed.
+
+Do not use a pipeline, background job, subshell, or command substitution as
+the primary validation of this fix. Those operations invoke Cygwin/MSYS fork
+and can encounter the separate forced-ASLR limitation in the Copilot sandbox.
+
+
+12. Restore the original DLL
+----------------------------
+
+Exit Copilot and all Git/MSYS programs. In elevated PowerShell:
+
+  $installed = 'C:\Program Files\Git\usr\bin\msys-2.0.dll'
+  $backup = 'C:\Program Files\Git\usr\bin\msys-2.0.dll.before-appcontainer-fix'
+
+  Copy-Item -LiteralPath $backup -Destination $installed -Force
+  Get-FileHash -LiteralPath $installed, $backup -Algorithm SHA256
+
+The restored and backup hashes must match. A VM checkpoint can also be used
+to restore the complete original state.
