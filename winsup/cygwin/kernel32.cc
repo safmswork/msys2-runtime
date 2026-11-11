@@ -29,11 +29,18 @@ named_object_sd (PCWSTR name, LPSECURITY_ATTRIBUTES sa)
   BOOLEAN present, defaulted;
   PACL dacl;
 
-  if (name && sd && appcontainer_sid ()
-      && (!NT_SUCCESS (RtlGetDaclSecurityDescriptor (sd, &present, &dacl,
-						      &defaulted))
-	  || !present || !dacl))
+  /* Unnamed objects, no caller SD, or not in an AppContainer: keep as is. */
+  if (!name || !sd || !appcontainer_sid ())
+    return sd;
+  /* Invalid SD: fall back to the default security. */
+  if (!NT_SUCCESS (RtlGetDaclSecurityDescriptor (sd, &present, &dacl,
+						  &defaulted)))
     return NULL;
+  /* No DACL, or a NULL DACL: use the default security, which includes
+     the AppContainer SID. */
+  if (!present || !dacl)
+    return NULL;
+  /* A real DACL from the caller: keep it. */
   return sd;
 }
 
