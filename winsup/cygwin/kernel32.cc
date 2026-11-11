@@ -19,18 +19,25 @@ details. */
 #include "winf.h"
 #include "sys/cygwin.h"
 
+/* In an AppContainer, named objects need a DACL granting the AppContainer SID
+   access, unless the caller supplied its own non-null DACL. */
 static bool
-has_non_null_dacl (PSECURITY_DESCRIPTOR psd)
+needs_appcontainer_sd (LPSECURITY_ATTRIBUTES sa)
 {
-  BOOLEAN present;
-  BOOLEAN defaulted;
+  BOOLEAN present, defaulted;
   PACL dacl;
 
-  return psd
-	 && NT_SUCCESS (RtlGetDaclSecurityDescriptor (psd, &present, &dacl,
-						      &defaulted))
-	 && present && dacl;
+  return appcontainer_sid ()
+	 && (!sa || !sa->lpSecurityDescriptor
+	     || !NT_SUCCESS (RtlGetDaclSecurityDescriptor
+				(sa->lpSecurityDescriptor, &present, &dacl,
+				 &defaulted))
+	     || !present || !dacl);
 }
+
+#define named_object_sd(name, sa, access) \
+  ((name) && needs_appcontainer_sd (sa) ? everyone_sd (access) \
+   : (sa) ? (sa)->lpSecurityDescriptor : NULL)
 
 /* Implement CreateEvent/OpenEvent so that named objects are always created in
    Cygwin shared object namespace. */
@@ -52,13 +59,10 @@ CreateEventW (LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset,
       RtlInitUnicodeString (&uname, lpName);
       flags |= OBJ_OPENIF | OBJ_CASE_INSENSITIVE;
     }
-  PSECURITY_DESCRIPTOR psd
-    = lpEventAttributes ? lpEventAttributes->lpSecurityDescriptor : NULL;
-  if (lpName && appcontainer_sid () && !has_non_null_dacl (psd))
-    psd = appcontainer_sd (EVENT_ALL_ACCESS);
   InitializeObjectAttributes (&attr, lpName ? &uname : NULL, flags,
 			      lpName ? get_shared_parent_dir () : NULL,
-			      psd);
+			      named_object_sd (lpName, lpEventAttributes,
+					       EVENT_ALL_ACCESS));
   status = NtCreateEvent (&evt, EVENT_ALL_ACCESS, &attr,
 			  bManualReset ? NotificationEvent
 				       : SynchronizationEvent,
@@ -149,13 +153,10 @@ CreateMutexW (LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner,
       RtlInitUnicodeString (&uname, lpName);
       flags |= OBJ_OPENIF | OBJ_CASE_INSENSITIVE;
     }
-  PSECURITY_DESCRIPTOR psd
-    = lpMutexAttributes ? lpMutexAttributes->lpSecurityDescriptor : NULL;
-  if (lpName && appcontainer_sid () && !has_non_null_dacl (psd))
-    psd = appcontainer_sd (MUTEX_ALL_ACCESS);
   InitializeObjectAttributes (&attr, lpName ? &uname : NULL, flags,
 			      lpName ? get_shared_parent_dir () : NULL,
-			      psd);
+			      named_object_sd (lpName, lpMutexAttributes,
+					       MUTEX_ALL_ACCESS));
   status = NtCreateMutant (&mtx, MUTEX_ALL_ACCESS, &attr, bInitialOwner);
   if (!NT_SUCCESS (status))
     {
@@ -242,14 +243,10 @@ CreateSemaphoreW (LPSECURITY_ATTRIBUTES lpSemaphoreAttributes,
       RtlInitUnicodeString (&uname, lpName);
       flags |= OBJ_OPENIF | OBJ_CASE_INSENSITIVE;
     }
-  PSECURITY_DESCRIPTOR psd
-    = lpSemaphoreAttributes
-      ? lpSemaphoreAttributes->lpSecurityDescriptor : NULL;
-  if (lpName && appcontainer_sid () && !has_non_null_dacl (psd))
-    psd = appcontainer_sd (SEMAPHORE_ALL_ACCESS);
   InitializeObjectAttributes (&attr, lpName ? &uname : NULL, flags,
 			      lpName ? get_shared_parent_dir () : NULL,
-			      psd);
+			      named_object_sd (lpName, lpSemaphoreAttributes,
+					       SEMAPHORE_ALL_ACCESS));
   status = NtCreateSemaphore (&sem, SEMAPHORE_ALL_ACCESS, &attr,
 			      lInitialCount, lMaximumCount);
   if (!NT_SUCCESS (status))
@@ -356,13 +353,10 @@ CreateFileMappingW (HANDLE hFile, LPSECURITY_ATTRIBUTES lpAttributes,
       RtlInitUnicodeString (&uname, lpName);
       flags |= OBJ_OPENIF | OBJ_CASE_INSENSITIVE;
     }
-  PSECURITY_DESCRIPTOR psd
-    = lpAttributes ? lpAttributes->lpSecurityDescriptor : NULL;
-  if (lpName && appcontainer_sid () && !has_non_null_dacl (psd))
-    psd = appcontainer_sd (access);
   InitializeObjectAttributes (&attr, lpName ? &uname : NULL, flags,
 			      lpName ? get_shared_parent_dir () : NULL,
-			      psd);
+			      named_object_sd (lpName, lpAttributes,
+					       access));
   if (!(attribs & (SEC_RESERVE | SEC_COMMIT)))
     attribs |= SEC_COMMIT;
   if (hFile == INVALID_HANDLE_VALUE)

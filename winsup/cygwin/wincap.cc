@@ -243,7 +243,7 @@ static const wincaps wincap_11 = {
   },
 };
 
-wincapc wincap __attribute__((section (".cygwin_dll_common"), shared));
+wincapc wincap;
 
 extern IMAGE_DOS_HEADER
 __image_base__;
@@ -254,16 +254,7 @@ wincapc::init ()
   PIMAGE_NT_HEADERS ntheader;
   USHORT emul_mach;
 
-  if (caps == &wincap_8_1
-      || caps == &wincap_10_1507
-      || caps == &wincap_10_1607
-      || caps == &wincap_10_1703
-      || caps == &wincap_10_1709
-      || caps == &wincap_10_1803
-      || caps == &wincap_10_1809
-      || caps == &wincap_10_1903
-      || caps == &wincap_10_2004
-      || caps == &wincap_11)
+  if (caps)
     return;		// already initialized
 
   GetSystemInfo (&system_info);

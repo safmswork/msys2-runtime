@@ -475,7 +475,6 @@ LoadDLLfuncEx (ResizePseudoConsole, kernel32, 1)
 LoadDLLfunc (QueryInterruptTime, KernelBase)
 LoadDLLfunc (QueryInterruptTimePrecise, KernelBase)
 LoadDLLfunc (QueryUnbiasedInterruptTimePrecise, KernelBase)
-LoadDLLfunc (GetAppContainerNamedObjectPath, KernelBase)
 LoadDLLfuncEx (SetThreadDescription, KernelBase, 1)
 LoadDLLfunc (VirtualAlloc2, KernelBase)
 
