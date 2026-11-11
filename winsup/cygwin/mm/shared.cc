@@ -62,8 +62,7 @@ get_appcontainer_dir (PCWSTR prefix)
   UNICODE_STRING uname;
   OBJECT_ATTRIBUTES attr;
   RtlInitUnicodeString (&uname, path);
-  InitializeObjectAttributes (&attr, &uname, OBJ_OPENIF, NULL,
-			      everyone_sd (CYG_SHARED_DIR_ACCESS));
+  InitializeObjectAttributes (&attr, &uname, OBJ_OPENIF, NULL, NULL);
   status = NtCreateDirectoryObject (&dir, CYG_SHARED_DIR_ACCESS, &attr);
   if (!NT_SUCCESS (status))
     api_fatal ("NtCreateDirectoryObject(%S): %y", &uname, status);

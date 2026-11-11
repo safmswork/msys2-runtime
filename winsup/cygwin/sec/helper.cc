@@ -726,11 +726,15 @@ _everyone_sd (void *buf, ACCESS_MASK access)
   NTSTATUS status;
   PISECURITY_DESCRIPTOR psd = (PISECURITY_DESCRIPTOR) buf;
 
+  /* In an AppContainer, use the token's default security, which grants the
+     user, the logon session, SYSTEM, and the AppContainer, not everyone. */
+  if (appcontainer_sid ())
+    return NULL;
   if (psd)
     {
       RtlCreateSecurityDescriptor (psd, SECURITY_DESCRIPTOR_REVISION);
       PACL dacl = (PACL) (psd + 1);
-      RtlCreateAcl (dacl, MAX_DACL_LEN (2), ACL_REVISION);
+      RtlCreateAcl (dacl, MAX_DACL_LEN (1), ACL_REVISION);
       status = RtlAddAccessAllowedAce (dacl, ACL_REVISION, access,
 				       well_known_world_sid);
       if (!NT_SUCCESS (status))
@@ -738,9 +742,6 @@ _everyone_sd (void *buf, ACCESS_MASK access)
 	  debug_printf ("RtlAddAccessAllowedAce: %y", status);
 	  return NULL;
 	}
-      if (appcontainer_sid ())
-	RtlAddAccessAllowedAce (dacl, ACL_REVISION, access,
-				appcontainer_sid ());
       LPVOID ace;
       status = RtlFirstFreeAce (dacl, &ace);
       if (!NT_SUCCESS (status))
