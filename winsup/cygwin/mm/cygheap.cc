@@ -89,10 +89,12 @@ cygheap_fixup_in_child (bool execed)
   if (child_proc_info->cygheap_max > (void *) CYGHEAP_STORAGE_INITIAL)
     commit_size = allocsize ((char *) child_proc_info->cygheap_max
                    - CYGHEAP_STORAGE_LOW);
-  cygheap = (init_cygheap *) VirtualAlloc ((LPVOID) CYGHEAP_STORAGE_LOW,
-					   CYGHEAP_STORAGE_HIGH
-					   - CYGHEAP_STORAGE_LOW,
-					   MEM_RESERVE, PAGE_NOACCESS);
+  /* Fork reserves this range in the parent, before the loader can use it. */
+  if (execed)
+    cygheap = (init_cygheap *) VirtualAlloc ((LPVOID) CYGHEAP_STORAGE_LOW,
+					    CYGHEAP_STORAGE_HIGH
+					    - CYGHEAP_STORAGE_LOW,
+					    MEM_RESERVE, PAGE_NOACCESS);
   cygheap = (init_cygheap *) VirtualAlloc ((LPVOID) CYGHEAP_STORAGE_LOW,
 					   commit_size, MEM_COMMIT,
 					   PAGE_READWRITE);

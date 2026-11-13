@@ -611,6 +611,7 @@ $(NEW_DLL_NAME): $(LDSCRIPT) libdll.a $(VERSION_OFILES) $(LIBSERVER)\
 	$(AM_V_CXXLD)$(CXX) $(CXXFLAGS) \
 	-mno-use-libstdc-wrappers \
 	-Wl,--gc-sections -nostdlib -Wl,-T$(LDSCRIPT) -static \
+	-Wl,--dynamicbase,--high-entropy-va \
 	$${SOURCE_DATE_EPOCH:+-Wl,--no-insert-timestamp} \
 	-Wl,--heap=0 -Wl,--out-implib,msysdll.a -shared -o $@ \
 	-e @DLL_ENTRY@ $(DEF_FILE) \
