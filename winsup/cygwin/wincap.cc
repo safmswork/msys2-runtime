@@ -243,7 +243,7 @@ static const wincaps wincap_11 = {
   },
 };
 
-wincapc wincap;
+wincapc wincap __attribute__((section (".cygwin_dll_common"), shared));
 
 extern IMAGE_DOS_HEADER
 __image_base__;
