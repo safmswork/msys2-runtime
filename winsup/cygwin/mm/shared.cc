@@ -36,27 +36,23 @@ static HANDLE NO_COPY shared_parent_dir;
 
 /* AppContainer processes can't create objects in the global or session
    namespaces, so create the parent directories below the AppContainer's
-   private \Sessions\<id>\AppContainerNamedObjects\<SID> directory instead. */
+   private named object directory instead.  Let Windows compute its path,
+   so child AppContainers end up below their parent's directory. */
 static HANDLE
 get_appcontainer_dir (PCWSTR prefix)
 {
-  PROCESS_SESSION_INFORMATION psi;
-  NTSTATUS status = NtQueryInformationProcess (NtCurrentProcess (),
-					       ProcessSessionInformation,
-					       &psi, sizeof psi, NULL);
+  UNICODE_STRING acdir;
+  NTSTATUS status = RtlGetAppContainerNamedObjectPath (NULL, NULL, FALSE,
+						       &acdir);
   if (!NT_SUCCESS (status))
-    api_fatal ("NtQueryInformationProcess(ProcessSessionInformation): %y",
-	       status);
+    api_fatal ("RtlGetAppContainerNamedObjectPath: %y", status);
 
   WCHAR path[MAX_PATH];
-  PWCHAR p = path + __small_swprintf (path,
-				      L"\\Sessions\\%u\\AppContainerNamedObjects\\",
-				      psi.SessionId);
-  p = cygpsid (appcontainer_sid ()).pstring (p);
-  __small_swprintf (p, L"\\%W%s%s-%S", prefix,
+  __small_swprintf (path, L"%S\\%W%s%s-%S", &acdir, prefix,
 		    cygwin_version.shared_id,
 		    _cygwin_testing ? cygwin_version.dll_build_date : "",
 		    &cygheap->installation_key);
+  RtlFreeUnicodeString (&acdir);
 
   HANDLE dir;
   UNICODE_STRING uname;
