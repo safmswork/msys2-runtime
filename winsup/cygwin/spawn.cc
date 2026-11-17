@@ -639,6 +639,7 @@ child_info_spawn::worker (const char *prog_arg, const char *const *argv,
 	init_console_handler (CTTY_IS_VALID (myself->ctty));
 
       int heap_retries = 5;
+      int heap_errno = 0;
     loop:
       /* When ruid != euid we create the new process under the current original
 	 account and impersonate in child, this way maintaining the different
@@ -736,12 +737,48 @@ child_info_spawn::worker (const char *prog_arg, const char *const *argv,
 	SetHandleInformation (my_wr_proc_pipe, HANDLE_FLAG_INHERIT,
 			      HANDLE_FLAG_INHERIT);
 
+      /* With forced ASLR in an AppContainer, the child's initial allocations
+	 or loader allocations may land in the cygheap range.  Reserve it before
+	 the loader runs.  If it's already taken, retry with a new process.
+	 Otherwise fail the spawn rather than start a child without it. */
+      if (rc && in_appcontainer && iscygwin () && (c_flags & CREATE_SUSPENDED)
+	  && !VirtualAllocEx (pi.hProcess, (PVOID) CYGHEAP_STORAGE_LOW,
+			      CYGHEAP_STORAGE_HIGH - CYGHEAP_STORAGE_LOW,
+			      MEM_RESERVE, PAGE_NOACCESS))
+	{
+	  DWORD err = GetLastError ();
+	  debug_printf ("cannot reserve cygheap in child, %E");
+	  /* TerminateProcess is asynchronous, so wait for the child to exit.
+	     If it can't be terminated, it stays suspended and is never
+	     resumed. */
+	  bool gone = (TerminateProcess (pi.hProcess, EXITCODE_RETRY)
+		       || WaitForSingleObject (pi.hProcess, 0) == WAIT_OBJECT_0)
+		      && WaitForSingleObject (pi.hProcess, 5000) == WAIT_OBJECT_0;
+	  if (!gone)
+	    system_printf ("cannot terminate suspended child %u, %E",
+			   pi.dwProcessId);
+	  CloseHandle (pi.hThread);
+	  CloseHandle (pi.hProcess);
+	  if (gone && err == ERROR_INVALID_ADDRESS && heap_retries-- > 0)
+	    {
+	      cygheap->unlock ();
+	      goto loop;
+	    }
+	  heap_errno = (err == ERROR_INVALID_ADDRESS)
+		       ? EAGAIN : geterrno_from_win_error (err, ENOMEM);
+	  SetLastError (err);
+	  rc = FALSE;
+	}
+
       /* Set errno now so that debugging messages from it appear before our
 	 final debugging message [this is a general rule for debugging
 	 messages].  */
       if (!rc)
 	{
-	  __seterrno ();
+	  if (heap_errno)
+	    set_errno (heap_errno);
+	  else
+	    __seterrno ();
 	  syscall_printf ("CreateProcess failed, %E");
 	  /* If this was a failed exec, restore the saved sendsig. */
 	  if (reset_sendsig)
@@ -770,25 +807,6 @@ child_info_spawn::worker (const char *prog_arg, const char *const *argv,
 	  res = -1;
 	  cygheap->unlock ();
 	  __leave;
-	}
-
-      /* With forced ASLR in an AppContainer, the child's initial allocations
-	 or loader allocations may land in the cygheap range.  Reserve it before
-	 the loader runs, or retry with a new process if it's already taken. */
-      if (in_appcontainer && iscygwin () && (c_flags & CREATE_SUSPENDED)
-	  && !VirtualAllocEx (pi.hProcess, (PVOID) CYGHEAP_STORAGE_LOW,
-			      CYGHEAP_STORAGE_HIGH - CYGHEAP_STORAGE_LOW,
-			      MEM_RESERVE, PAGE_NOACCESS))
-	{
-	  debug_printf ("cannot reserve cygheap in child, %E");
-	  if (GetLastError () == ERROR_INVALID_ADDRESS && heap_retries-- > 0
-	      && TerminateProcess (pi.hProcess, EXITCODE_RETRY))
-	    {
-	      CloseHandle (pi.hThread);
-	      CloseHandle (pi.hProcess);
-	      cygheap->unlock ();
-	      goto loop;
-	    }
 	}
 
       /* The CREATE_SUSPENDED case is handled below */
